@@ -1,0 +1,73 @@
+version: '3.4'
+
+services:
+  envoy:
+    image: envoyproxy/envoy-dev:latest
+    volumes:
+      - ./docker/envoy/config/front-envoy.yaml:/etc/front-envoy.yaml
+    command: /usr/local/bin/envoy -c /etc/front-envoy.yaml
+    networks:
+      - default
+      - external
+  httpd:
+    image: httpd:2.4.39-alpine
+    volumes:
+      - ./docker/httpd/htdocs:/usr/local/apache2/htdocs
+      - ./docker/httpd/config/httpd.conf:/usr/local/apache2/conf/httpd.conf
+    ports:
+      - "18000:80"
+    networks:
+      - default
+      - external
+  wiremock-http:
+    image: request-catcher-wiremock
+    build:
+      context: ./docker/wiremock/
+    volumes:
+      - ./docker/wiremock/config/wiremock-http-default.json:/mappings/default.json
+    ports:
+      - "18080:8080"
+    networks:
+      - default
+      - external
+  wiremock-https:
+    image: request-catcher-wiremock
+    volumes:
+      - ./docker/wiremock/config/wiremock-https-default.json:/mappings/default.json
+    ports:
+      - "18081:8080"
+      - "18082:8081"
+  wiremock-proxy:
+    image: request-catcher-wiremock
+    command: --proxy-via=${PROXY_URL:-http://envoy}:${PROXY_PORT:-10000}
+    ports:
+      - "18083:8080"
+    networks:
+      - default
+      - external
+  iptables:
+    build:
+      context: ./docker/iptables/
+    environment:
+      - PROXY_PORT
+      - PROXY_TARGET_URL
+    volumes:
+      - ./docker/iptables/scripts:/etc/scripts
+    command: >
+      sh -c 
+        "sleep 5 &&
+         sh /etc/scripts/init-wiremock.sh &&
+         exec sh /etc/scripts/init-iptables.sh"
+    tty: true
+    network_mode: "container:${CONTAINER_NAME:-}"
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - wiremock-proxy
+
+networks:
+  default:
+    driver: bridge
+  external:
+    external:
+      name: ${NETWORK_NAME:-request-catcher_default}

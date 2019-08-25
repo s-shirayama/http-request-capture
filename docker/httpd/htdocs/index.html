@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue-tables-2/dist/vue-tables-2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/v-jsoneditor/docs/dist/v-jsoneditor.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako/dist/pako.min.js"></script>
+    <style>
+    .modal-mask {
+      position: fixed;
+      z-index: 9998;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, .5);
+      display: table;
+      transition: opacity .3s ease;
+    }
+
+    .modal-wrapper {
+      display: table-cell;
+      vertical-align: middle;
+    }
+
+    .modal-container {
+      width: 80%;
+      margin: 0px auto;
+      background-color: #fff;
+      border-radius: 2px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .33);
+      transition: all .3s ease;
+      font-family: Helvetica, Arial, sans-serif;
+    }
+
+    .modal-header h3 {
+      margin-top: 0;
+      color: #42b983;
+    }
+
+    .modal-default-button {
+      float: right;
+    }
+
+    .modal-enter {
+      opacity: 0;
+    }
+
+    .modal-leave-active {
+      opacity: 0;
+    }
+
+    .modal-enter .modal-container,
+    .modal-leave-active .modal-container {
+      -webkit-transform: scale(1.1);
+      transform: scale(1.1);
+    }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <h3>Target Wiremock port</h3>
+      <ul>
+        <li v-for="port in portList">
+          <a @click="setTargetPort(port)">{{ port }}</a>
+          <span v-if="port === targetPort"> << selected</span>
+        </li>
+      </ul>
+      <input type="button" value="update mappings / requests" @click="update()">
+      <div v-if="mappingTarget !== null">
+        <h3 id="editMappingTarget">Edit Mapping Target</h3>
+        <p>id: {{ mappingTarget.id }}</p>
+        <p>request:
+          <v-jsoneditor v-model="mappingTarget.request"></v-jsoneditor>
+        </p>
+        <p>response:
+          <v-jsoneditor v-model="mappingTarget.response"></v-jsoneditor>
+        </p>
+        <p>responseBody: 
+          <v-jsoneditor v-if="mappingTarget.isJson" v-model="mappingTarget.responseBody"></v-jsoneditor>
+          <textarea v-else style="width: 100%; height: 200px" v-model="mappingTarget.responseBody"></textarea>
+        </p>
+        <input type="button" @click="updateMappingTarget" value="update">
+      </div>
+      <h3>Mappings</h3>
+      <div v-if="targetPort === 'proxy'">
+        <h4>Add proxy target URL</h4>
+        <input v-model="proxyTargetUrl" type="text">
+        <input type="button" value="Add" @click="setProxyTargetUrl">
+        <h4>Mappings List</h4>
+      </div>
+      <v-client-table :columns="['edit', 'request', 'response']" :data="mappings" :options="{filterable: false}">
+        <pre style="max-width: 400px" slot="request" slot-scope="props">{{ json2text(props.row.request) }}</pre>
+        <pre style="max-width: 400px" slot="response" slot-scope="props">{{ json2text(props.row.response) }}</pre>
+        <div slot="edit" slot-scope="props">
+          <input v-show="props.row.request.method !== 'ANY'"
+                 type="button" @click="setEditMappingTarget(props.row.id)" value="update">
+          <input v-show="props.row.request.method !== 'ANY' || props.row.request.headers !== undefined"
+                 type="button" @click="deleteMapping(props.row.id)" value="delete">
+        </div>
+      </v-client-table>
+      <h3>Requests</h3>
+      <input type="button" @click="deleteAllRequests()" value="deleteAllRequests">
+      <v-client-table :columns="['buttons', 'request', 'response']" :data="requests" :options="{filterable: false}">
+        <pre style="max-width: 400px" slot="request" slot-scope="props">{{ json2text(props.row.request) }}</pre>
+        <pre style="max-width: 400px" slot="response" slot-scope="props">{{ json2text(props.row.response) }}</pre>
+        <div slot="buttons" slot-scope="props">
+          <input type="button" @click="addToMapping(props.row.id)" value="add">
+          <input type="button" @click="showResponseBody(props.row.id)" value="show response body">
+        </div>
+      </v-client-table>
+      <modal v-if="showModal" @close="showModal = false">
+        <div slot="body">
+          <v-jsoneditor readonly v-if="responseBodyIsJson" v-model="responseBody"></v-jsoneditor>
+          <textarea readonly v-else style="width: 100%; height: 200px" v-model="responseBody"></textarea>
+        </div>
+      </modal>
+    </div>
+    <script type="text/x-template" id="modal-template">
+      <transition name="modal">
+        <div class="modal-mask">
+          <div class="modal-wrapper">
+            <div class="modal-container">
+              <div class="modal-header">
+                <h3>Response Body</h3>
+              </div>
+              <div class="modal-body">
+                <slot name="body">
+                  default body
+                </slot>
+              </div>
+              <div class="modal-footer">
+                <button class="modal-default-button" @click="$emit('close')">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </script>
+<script>
+Vue.use(VueTables.ClientTable)
+Vue.component('modal', {
+  template: '#modal-template'
+})
+const UI_PORT = 18000
+var app = new Vue({
+  el: '#app',
+  data () {
+    return {
+      portList: ['http', 'https', 'proxy'],
+      targetPort: 'http',
+      mappings: [],
+      requests: [],
+      mappingTarget: null,
+      proxyTargetUrl: '',
+      showModal: false,
+      responseBody: '',
+      responseBodyIsJson: false,
+    }
+  },
+  methods: {
+    showResponseBody(id) {
+      console.log(id)
+      var response = this.requests.filter(v => v.id === id)[0].response
+      console.log(response)
+      var responseBody = (response.headers['content-encoding'] === 'gzip')? 
+        pako.ungzip(atob(response.bodyAsBase64), {to: 'string'}) : response.body
+      this.responseBodyIsJson = (response.headers['content-type'].match('application/json') !== null)
+      this.responseBody = this.responseBodyIsJson ? JSON.parse(responseBody) : responseBody
+      this.showModal = true
+    },
+    setProxyTargetUrl() {
+      axios
+      .post(this.adminUrl + 'mappings', {
+        request: {
+          headers: {
+            Host: {
+              equalTo: this.proxyTargetUrl.split('/')[2]
+            }
+          },
+          method: 'ANY'
+        },
+        response: {
+          status: 200,
+          proxyBaseUrl: this.proxyTargetUrl
+        },
+        priority: 10
+      })
+      .then(this.update)
+      this.proxyTargetUrl = ''
+    },
+    setTargetPort(port) {
+      this.targetPort = port
+      this.update()
+    },
+    json2text(obj) {
+      return JSON.stringify(obj, undefined, 2)
+    },
+    deleteAllRequests() {
+      axios
+      .delete(this.adminUrl + 'requests')
+      .then(this.update)
+    },
+    addToMapping(id) {
+      axios
+      .post(this.adminUrl + 'recordings/snapshot', {
+        filters: {
+          ids: [id]
+        },
+        captureHeaders: {
+          Host: {}
+        },
+        persist: false,
+        extractBodyCriteria: {
+          textSizeThreshold: '0',
+          binarySizeThreshold: '0'
+        }
+      })
+      .then(this.update)
+    },
+    deleteMapping(id) {
+      axios
+      .delete(`${this.adminUrl}mappings/${id}`)
+      .then(this.update)
+    },
+    updateMappingTarget() {
+      axios
+      .put(`${this.adminUrl}mappings/${this.mappingTarget.id}`, {
+        request: this.mappingTarget.request,
+        response: this.mappingTarget.response,
+      })
+      .then(response => {
+        axios
+        .put(`${this.adminUrl}files/${this.mappingTarget.response.bodyFileName}`, this.mappingTarget.responseBody)
+        .then(this.update)
+      })
+    },
+    setEditMappingTarget(id) {
+      var mapping = Vue.util.extend({}, this.mappings.filter(v => v.id === id)[0])
+      axios
+      .get(this.fileGetUrl + mapping.response.bodyFileName)
+      .then(response => {
+        mapping.responseBody = response.data
+        mapping.isJson = (typeof mapping.responseBody === 'object')
+        this.mappingTarget = mapping
+        setTimeout(() => {window.location.href = '#editMappingTarget'}, 500)
+      })
+    },
+    update() {
+      this.mappingTarget = null
+      axios
+      .get(this.adminUrl + 'mappings')
+      .then(response => this.mappings = response.data.mappings)
+      axios
+      .get(this.adminUrl + 'requests')
+      .then(response => this.requests = response.data.requests)
+    }
+  },
+  computed: {
+    adminUrl() {
+      return `http://localhost:${UI_PORT}/wiremock-${this.targetPort}/__admin/`
+    },
+    fileGetUrl() {
+      return `http://localhost:${UI_PORT}/wiremock-${this.targetPort}/__files/`
+    }
+  },
+  mounted () {
+    this.update()
+  }
+})
+</script>
+  </body>
+</html>

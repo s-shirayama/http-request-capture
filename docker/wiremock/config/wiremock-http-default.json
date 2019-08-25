@@ -1,0 +1,10 @@
+{
+  "request": {
+    "method": "ANY"
+  },
+  "response" : {
+    "status": 200,
+    "proxyBaseUrl" : "http://envoy:10000"
+  },
+  "priority": 10
+}
