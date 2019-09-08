@@ -68,7 +68,6 @@ All containers will be run with `docker-compose`. We need to pass necessary para
 | NETWORK_NAME | development_default | If target container is using custom network (like docker-compose), please specify network name in order to enable container alias name access. Otherwise make it empty. You can check network name by `docker inspect -f '{{.NetworkSettings.Networks}}' ${CONTAINER_NAME}` command. |
 | PROXY_URL | http\://your-forward-proxy | Forward proxy server's url. |
 | PROXY_PORT | 9000 | Forward proxy server's port. |
-| PROXY_TARGET_URL | "http\://target-domain-1 http\://target-domain-2" | API base URLs which are called through `PROXY_URL:PROXY_PORT`. This variable can have multiple values split by spaces. |
 
 Note: `PROXY_XXXX` will be used for proxy-mode (not mandatory).
 
@@ -87,13 +86,12 @@ CONTAINER_NAME=##REPLACE HERE## \
 NETWORK_NAME=##REPLACE HERE## \
 PROXY_URL=##REPLACE HERE## \
 PROXY_PORT=##REPLACE HERE## \
-PROXY_TARGET_URL="##REPLACE HERE##" \
 docker-compose up -d
 ```
 
 ## Open UI
 
-Go to http://localhost:18000/
+Go to http://localhost:18080/
 
 ## Shutdown
 
@@ -111,7 +109,7 @@ docker-compose -f example/docker-compose.yaml up -d
 ```
 
 - Open http://localhost:8000/
-- Set up with any values
+- Set up Wordpress with any values
 - Log in to management UI (wp-admin)
 
 ## 1. For http request
@@ -126,13 +124,13 @@ docker-compose up -d
 
 ### Open request-catcher UI
 
-Open http://localhost:18000/
+Open http://localhost:18080/
 
 ![](docs/ScreenShot_1.png)
 
 ### Check request/response
 - Go to http://localhost:8000/wp-admin/plugin-install.php?s&tab=search&type=term
-- Click "update mappings / requests" on http://localhost:18000/
+- Click "update mappings / requests" on http://localhost:18080/
 
 -> You can see Requests and Response
 
@@ -140,12 +138,12 @@ Open http://localhost:18000/
 
 - Click "show response body"
 
--> You ca see response body
+-> You can see response body
 
 ![](docs/ScreenShot_6.png)
 
 ### Modify response
-- Click "add" on the "AddToMapping" column on http://localhost:18000/
+- Click "add" on the "AddToMapping" column on http://localhost:18080/
 - Click "update" on "Edit" column
 - Modify info.results on "responseBody"
 ![](docs/ScreenShot_3.png)
@@ -160,7 +158,7 @@ Open http://localhost:18000/
 ![](docs/ScreenShot_5.png)
 
 ## 2. For https request
-NOTE: to capture https request, the application needs to IGNORE certification for now.
+NOTE: to capture https request, the application needs to IGNORE certification error.
 
 ### Change certification check setting of curl on Wordpress
 
@@ -175,9 +173,9 @@ add_action('http_api_curl', function( $handle ){
 - Click "Update File"
 
 ### Check request/response
-- Click "https" on http://localhost:18000/
+- Click "https" on http://localhost:18080/
 - Go to http://localhost:8000/wp-admin/plugin-install.php?s&tab=search&type=term
-- Click "update mappings / requests" on http://localhost:18000/
+- Click "update mappings / requests" on http://localhost:18080/
 
 -> You can see Requests and Response of https requests
 
@@ -191,15 +189,11 @@ docker-compose down;
 
 ### Start containers
 
-NOTE: You need to specify target API URLs beforehand.
-NOTE: Currently https URL cannot be used.
-
 ```bash
 CONTAINER_NAME=example_wordpress_1 \
 NETWORK_NAME=example_default \
-PROXY_URL=http://envoy \
-PROXY_PORT=10000 \
-PROXY_TARGET_URL="http://api.wordpress.org" \
+PROXY_URL=http://goproxy \
+PROXY_PORT=8080 \
 docker-compose up -d
 ```
 
@@ -209,18 +203,23 @@ docker-compose up -d
 - Add this on the bottom of the file
 ```
 add_action('http_api_curl', function( $handle ){
-    curl_setopt($handle, CURLOPT_PROXY, "envoy");
-    curl_setopt($handle, CURLOPT_PROXYPORT, 10000);
+    $info = curl_getinfo($handle);
+    if (strpos($info['url'], '//localhost') === false) {
+        curl_setopt($handle, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($handle, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($handle, CURLOPT_PROXY, "goproxy");
+        curl_setopt($handle, CURLOPT_PROXYPORT, 8080);
+    }
  }, 10);
  ```
 - Click "Update File"
 
 ### Check request/response
-- Click "proxy" on http://localhost:18000/
+- Click "proxy" on http://localhost:18080/
 - Go to http://localhost:8000/wp-admin/plugin-install.php?s&tab=search&type=term
-- Click "update mappings / requests" on http://localhost:18000/
+- Click "update mappings / requests" on http://localhost:18080/
 
--> You can see Requests and Response of https requests
+-> You can see Requests and Response of proxy requests
 
 ### Shut down everything
 

@@ -20,7 +20,7 @@ if [ "${PROXY_PORT}" != "" ]; then
   CAPTURE_TARGET_PORT="${CAPTURE_TARGET_PORT},${PROXY_PORT}"
   iptables -t nat -A ISTIO_REDIRECT -p tcp --dport ${PROXY_PORT} -j DNAT --to-destination ${DOCKER_HOST_IP}:18083
 fi
-iptables -t nat -A ISTIO_REDIRECT -p tcp --dport 80  -j DNAT --to-destination ${DOCKER_HOST_IP}:18080
+iptables -t nat -A ISTIO_REDIRECT -p tcp --dport 80  -j DNAT --to-destination ${DOCKER_HOST_IP}:18081
 iptables -t nat -A ISTIO_REDIRECT -p tcp --dport 443 -j DNAT --to-destination ${DOCKER_HOST_IP}:18082
 iptables -t nat -A ISTIO_OUTPUT -o lo ! -d 127.0.0.1/32 -j ISTIO_REDIRECT
 iptables -t nat -A ISTIO_OUTPUT -d 127.0.0.1/32 -j RETURN
