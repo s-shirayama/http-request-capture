@@ -8,10 +8,11 @@ For debugging or testing, engineers want to capture API requests and see the req
 
 This can 
 
-- record requests/responses for all requests to API
+- record requests/responses for all http requests to API
 - modify specific response to check the application behavior
 
 without any changes on the application side.
+(to capture https request, application needs to ignore certification error.)
 
 # System Diagram
 
@@ -26,27 +27,27 @@ iptables rules will be set by iptables container to this container's network.
 
 ### 2. iptables container
 
-This will be run with target container's network (`--net container:{{container_name}}`). And it sets iptables rules to route all request to specific port (80, 443 and proxy port if it's used) to wiremock's ports.
+This will be run with target container's network (`--net container:{{container_name}}`). And it sets iptables rules to route all request to specific port (80, 443 and proxy port if it's used) to request capture's ports.
 
-### 3. wiremock-{http,https}
+### 3. http-request-capture container
 
-It runs [Wiremock](https://github.com/tomakehurst/wiremock) and gets requests from target container.
-And it passes the requests to envoy container which runs forward proxy.
-wiremock cannot route to all requests to several external APIs according to host header.
+#### 3-1. http request capture
 
-### 4. envoy (forward-proxy)
+It gets http API requests and passes them to actual API servers. And it records requests/responses. If there is mappings (that can be set by admin API) for a specific request, it returns a pre-set response. 
 
-It runs [envoy](https://github.com/envoyproxy/envoy) as forward proxy server. It will route the requests to each external API servers according to host header.
-Since wiremock can route the request to only one destination with one mapping, this forward proxy routes the request to actual external API servers according to host header.
+#### 3-2. https request capture
 
-### 5. wiremock-proxy
+It's almost same as http request capture.
+It provides self-singed certificate. So the application needs to ignore certification error.
 
-This is for proxy requests. If application is calling API through specific proxy, this container will be used.
-All requests to specific port will be routed to this container and the requests will be routed to specific external proxy server.
+#### 3-3. proxy request capture
 
-### 6. httpd (UI)
+It's almost same as http request capture.
+To capture https requests, it runs MITM (man in the middle) proxy based on [elazarl/goproxy](https://github.com/elazarl/goproxy).
 
-This provides web UI to manage wiremock requests/mappings.
+#### 3-4. admin (UI and API)
+
+This provides web UI to manage requests/mappings.
 
 It can 
 - List mappings (stub settings or routes settings)
