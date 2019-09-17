@@ -16,7 +16,9 @@ without any changes on the application side.
 
 # System Diagram
 
-![](docs/RequestCatcherDiagram.png)
+original | with http-request-capture
+:-------------------------:|:-------------------------:
+![](docs/HttpRequestCaptureBeforeDiagram.png)  |  ![](docs/HttpRequestCaptureDiagram.png)
 
 ## Containers
 
@@ -72,7 +74,9 @@ All containers will be run with `docker-compose`. We need to pass necessary para
 
 Note: `PROXY_XXXX` will be used for proxy-mode (not mandatory).
 
-## Start (without proxy-mode)
+## Run http-request-capture
+
+### without proxy-mode
 
 ```bash
 CONTAINER_NAME=##REPLACE HERE## \
@@ -80,7 +84,7 @@ NETWORK_NAME=##REPLACE HERE## \
 docker-compose up -d
 ```
 
-## Start (with proxy-mode)
+### with proxy-mode
 
 ```bash
 CONTAINER_NAME=##REPLACE HERE## \
@@ -102,7 +106,7 @@ docker-compose down;
 
 # Try it with example application
 
-Try request-catcher with [Wordpress](https://docs.docker.com/compose/wordpress/) on your local.
+Try http-request-capture with [Wordpress](https://docs.docker.com/compose/wordpress/) on your local.
 
 ## Set up wordpress containers
 ```bash
@@ -113,7 +117,7 @@ docker-compose -f example/docker-compose.yaml up -d
 - Set up Wordpress with any values
 - Log in to management UI (wp-admin)
 
-## 1. For http request
+## 1. Capture http request
 
 ### Start containers
 
@@ -158,7 +162,7 @@ Open http://localhost:18080/
 #### After
 ![](docs/ScreenShot_5.png)
 
-## 2. For https request
+## 2. Capture https request
 NOTE: to capture https request, the application needs to IGNORE certification error.
 
 ### Change certification check setting of curl on Wordpress
@@ -186,7 +190,7 @@ add_action('http_api_curl', function( $handle ){
 docker-compose down;
 ```
 
-## 3. For Proxy requests
+## 3. Capture proxy requests
 
 ### Start containers
 
